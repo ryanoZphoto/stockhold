@@ -52,7 +52,7 @@ if __name__ == "__main__":
         # Place your code functions or classes here as required, e.g., main()
         logger.info("All tasks completed successfully.")
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
 
 # Securely load Robinhood credentials
 config_path = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -63,7 +63,7 @@ try:
         password = config.get('password')
     logger.info("Successfully loaded Robinhood credentials.")
 except FileNotFoundError:
-    logger.error(f"Configuration file not found at {config_path}")
+    logger.error(f"Configuration file not found at {config_path}", exc_info=True)
     raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
 if not username or not password:
@@ -75,7 +75,7 @@ try:
     r.login(username=username, password=password)
     logger.info("Successfully logged into Robinhood.")
 except Exception as e:
-    logger.error(f"Failed to login to Robinhood: {e}")
+    logger.error(f"Failed to login to Robinhood: {e}", exc_info=True)
     raise
 
 class StockDataFetcher:
@@ -86,7 +86,7 @@ class StockDataFetcher:
             # Fetch intraday data
             intraday_data = r.stocks.get_stock_historicals(symbol, interval=interval, span=span)
             if intraday_data is None or len(intraday_data) == 0:
-                logger.error(f"No intraday data available for {symbol}")
+                logger.error(f"No intraday data available for {symbol}", exc_info=True)
                 return None
 
             df = pd.DataFrame(intraday_data)
@@ -132,7 +132,7 @@ class StockDataFetcher:
             logger.debug(f"Fetching historical data for {symbol}.")
             historical_data = r.stocks.get_stock_historicals(symbol, interval='day', span='year')
             if historical_data is None or len(historical_data) == 0:
-                logger.error(f"No historical data available for {symbol}")
+                logger.error(f"No historical data available for {symbol}", exc_info=True)
                 return None
 
             hist_df = pd.DataFrame(historical_data)
@@ -151,14 +151,14 @@ class StockDataFetcher:
             df = df.dropna()
 
             if df.empty:
-                logger.error(f"No valid data after processing for {symbol}")
+                logger.error(f"No valid data after processing for {symbol}", exc_info=True)
                 return None
 
             logger.info(f"Successfully fetched and processed data for {symbol}.")
             return df
 
         except Exception as e:
-            logger.error(f"Error fetching data for {symbol}: {str(e)}")
+            logger.error(f"Error fetching data for {symbol}: {str(e, exc_info=True)}", exc_info=True)
             return None
 
     @staticmethod
@@ -172,7 +172,7 @@ class StockDataFetcher:
             logger.debug(f"Sentiment score for {symbol}: {sentiment_score}")
             return sentiment_score
         except Exception as e:
-            logger.error(f"Error getting sentiment for {symbol}: {str(e)}")
+            logger.error(f"Error getting sentiment for {symbol}: {str(e, exc_info=True)}", exc_info=True)
             return 0
 
 class StockSelector:
@@ -226,7 +226,7 @@ class StockSelector:
                         })
                         logger.info(f"Stock {symbol} added to workable stocks.")
                 except Exception as e:
-                    logger.error(f"Failed to process {symbol}: {str(e)}")
+                    logger.error(f"Failed to process {symbol}: {str(e, exc_info=True)}", exc_info=True)
                     continue
 
             # Sort stocks by a combined score
@@ -238,7 +238,7 @@ class StockSelector:
             logger.info(f"Top 10 workable stocks: {top_stocks}")
             return top_stocks  # Return top 10 stocks
         except Exception as e:
-            logger.error(f"Error identifying workable stocks: {str(e)}")
+            logger.error(f"Error identifying workable stocks: {str(e, exc_info=True)}", exc_info=True)
             return []
 
 class AdaptiveEnsembleModel:
@@ -297,7 +297,7 @@ class AdaptiveEnsembleModel:
 
             logger.info(f"{self.symbol} model accuracies - LSTM: {lstm_accuracy:.4f}, RF: {rf_accuracy:.4f}, GB: {gb_accuracy:.4f}")
         except Exception as e:
-            logger.error(f"Error training models for {self.symbol}: {e}")
+            logger.error(f"Error training models for {self.symbol}: {e}", exc_info=True)
 
     def predict(self, df):
         logger.info(f"Predicting price movement for {self.symbol}.")
@@ -319,10 +319,12 @@ class AdaptiveEnsembleModel:
             logger.debug(f"Prediction for {self.symbol}: {ensemble_pred}")
             return ensemble_pred
         except Exception as e:
-            logger.error(f"Error predicting for {self.symbol}: {e}")
+            logger.error(f"Error predicting for {self.symbol}: {e}", exc_info=True)
             return 0.5  # Neutral prediction on error
 
     def explain_prediction(self, df):
+    logger.info(f"Generating SHAP explanation for {self.symbol}.")
+    try:
         logger.info(f"Generating SHAP explanation for {self.symbol}.")
         try:
             features = ['rsi', 'MACD', 'MACD_signal', 'ATR', 'price_change', 'volume_change',
@@ -507,7 +509,7 @@ class TradingStrategy:
 
             self.trades_today += 1
         except Exception as e:
-            logger.error(f"Error executing trade for {symbol}: {str(e)}")
+            logger.error(f"Error executing trade for {symbol}: {str(e, exc_info=True)}", exc_info=True)
 
     def process_stock(self, symbol):
         logger.debug(f"Processing stock: {symbol}")
@@ -526,9 +528,12 @@ class TradingStrategy:
             if action != 'hold' and quantity > 0:
                 self.execute_trade(symbol, action, quantity, current_price)
         else:
-            logger.error(f"Failed to fetch data for {symbol}.")
+            logger.error(f"Failed to fetch data for {symbol}.", exc_info=True)
 
     def run(self):
+    logger.info("Starting trading strategy.")
+    workable_stocks = StockSelector.identify_workable_stocks()
+    processed_symbols = []
         logger.info("Starting trading strategy.")
         workable_stocks = StockSelector.identify_workable_stocks()
 
@@ -539,6 +544,7 @@ class TradingStrategy:
 
             with ThreadPoolExecutor(max_workers=10) as executor:
                 executor.map(self.process_stock, workable_stocks)
+        processed_symbols.extend(workable_stocks)
 
             # Reset daily counters if a new day has started
             if datetime.now().date() > self.last_trade_date:
@@ -552,7 +558,23 @@ class TradingStrategy:
             logger.info("Waiting for next iteration.")
             time.sleep(300)  # Wait for 5 minutes
 
+    self.generate_shap_plots(processed_symbols)
         self.analyze_performance()
+
+def generate_shap_plots(self, symbols):
+    logger.info("Generating SHAP plots in the main thread.")
+    for symbol in symbols:
+        try:
+            shap_values = np.load(f"{symbol}_shap_values.npy", allow_pickle=True)
+            X = np.load(f"{symbol}_X.npy", allow_pickle=True)
+            features = ["rsi", "MACD", "MACD_signal", "ATR", "price_change", "volume_change",
+                        "sentiment", "price_to_yearly_high", "price_to_yearly_low", "yearly_trend"]
+            shap.summary_plot(shap_values, X, feature_names=features, plot_type="bar")
+            plt.savefig(f"{symbol}_shap_summary.png")
+            plt.close()
+            logger.info(f"SHAP summary plot saved for {symbol}.")
+        except Exception as e:
+            logger.error(f"Error generating SHAP plot for {symbol}: {e}", exc_info=True)
 
     def analyze_performance(self):
         logger.info("Analyzing trading performance.")
@@ -582,8 +604,6 @@ class TradingStrategy:
         plt.title('Cumulative Profit Over Time')
         plt.xlabel('Trade Number')
         plt.ylabel('Cumulative Profit ($)')
-        plt.savefig('cumulative_profit.png')
-        plt.close()
         logger.info("Cumulative profit plot saved.")
 
         # Plot trade distribution
@@ -592,8 +612,6 @@ class TradingStrategy:
         plt.title('Distribution of Trade Profits')
         plt.xlabel('Profit ($)')
         plt.ylabel('Frequency')
-        plt.savefig('profit_distribution.png')
-        plt.close()
         logger.info("Profit distribution plot saved.")
 
         # Save trade log to file
@@ -641,7 +659,8 @@ def main():
         strategy = TradingStrategy()
         strategy.run()
     except Exception as e:
-        logger.error(f"An error occurred in the main execution: {str(e)}")
+        logger.error(f"An error occurred in the main execution: {str(e, exc_info=True)}", exc_info=True)
 
 if __name__ == "__main__":
     main()
+
